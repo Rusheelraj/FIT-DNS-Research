@@ -4,7 +4,6 @@ from mininet.cli import CLI
 from mininet.log import setLogLevel, info
 from mininet.node import Controller, RemoteController  # add RemoteController here
 
-
 def customNet():
     "Create a custom network with 3 hosts and a switch"
 
