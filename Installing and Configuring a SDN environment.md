@@ -249,7 +249,7 @@ sudo ovs-vsctl add-port br0 vm2 -- set Interface vm2 type=internal
 ```
 The ovs-vsctl add-port command adds an internal port named "vm1"/"vm2"(second command) to the OVS bridge "br0," allowing it to participate in the virtual network managed by Open vSwitch.
 
-### ADD THE SDN CONTROLLER TO THE SWITCH: 
+#### Add the SDN controller to the switch: 
 ```
 sudo ovs-vsctl set-controller br0 tcp:10.102.211.21:6633 // Replace the IP address with the machine that has the SDN controller 
 
